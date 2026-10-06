@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [[ ! -f .env ]]; then
+  echo "bin/dev: run bin/setup first." >&2
+  exit 1
+fi
+set -a
+source .env
+set +a
+
+if [[ -z "${BASELINE_SKIP_DOCKER:-}" ]]; then
+  docker compose up -d --wait mysql
+fi
+
+api_port="${BASELINE_API_PORT:-3000}"
+console_port="${BASELINE_CONSOLE_PORT:-5173}"
+export BASELINE_API_URL="${BASELINE_API_URL:-http://localhost:${api_port}}"
+export BASELINE_CONSOLE_PORT="$console_port"
+
+trap 'kill 0' EXIT INT TERM
+
+(cd apps/api && bin/rails server -p "$api_port") &
+(cd apps/console && npm run dev) &
+
+echo "API on ${BASELINE_API_URL}, console on http://localhost:${console_port}. Ctrl-C stops both."
+wait

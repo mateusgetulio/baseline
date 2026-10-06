@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || { echo "bin/setup: $1 is required. $2" >&2; exit 1; }
+}
+need ruby "Install Ruby 3.2 or newer (this repo is developed on 4.0)."
+need node "Install Node 22 or newer."
+need npm "Install npm."
+
+if [[ ! -f .env ]]; then
+  echo "== Writing .env with a fresh SANDBOX_ADMIN_TOKEN =="
+  echo "SANDBOX_ADMIN_TOKEN=$(ruby -rsecurerandom -e 'print SecureRandom.hex(24)')" > .env
+fi
+set -a
+source .env
+set +a
+
+if [[ -z "${BASELINE_SKIP_DOCKER:-}" ]]; then
+  need docker "Install Docker, or set BASELINE_SKIP_DOCKER=1 and point DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD at your own MySQL 8."
+  echo "== Starting MySQL 8.4 on port 3307 =="
+  docker compose up -d --wait mysql
+fi
+
+echo "== API: gems and databases =="
+(
+  cd apps/api
+  bundle config set --local path vendor/bundle
+  bundle check >/dev/null 2>&1 || bundle install
+  bin/rails db:prepare
+  RAILS_ENV=test bin/rails db:prepare
+)
+
+echo "== MCP server: install and build =="
+(cd apps/mcp && npm ci && npm run build)
+
+echo "== Console: install =="
+(cd apps/console && npm ci)
+
+echo
+echo "Setup done. Run bin/dev, then open http://localhost:${BASELINE_CONSOLE_PORT:-5173}."

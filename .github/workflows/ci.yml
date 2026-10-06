@@ -62,3 +62,28 @@ jobs:
       - name: MCP end to end (test 10)
         working-directory: apps/mcp
         run: npm run test:e2e
+
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/console
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/console/package-lock.json
+
+      - run: npm ci
+
+      - name: TypeScript (console)
+        run: npx tsc -b
+
+      - name: ESLint (console)
+        run: npx eslint .
+
+      - name: Build (console)
+        run: npx vite build
