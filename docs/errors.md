@@ -18,7 +18,7 @@ The outcome of a mutation that ran, success or 4xx, is stored under its `Idempot
 
 | Code | Status | When |
 |---|---|---|
-| `unauthorized` | 401 | The `Authorization: Bearer` key is missing, malformed, unknown or revoked. |
+| `unauthorized` | 401 | The `Authorization: Bearer` key is missing, malformed, unknown or revoked. On `/sandbox` routes, the bootstrap secret is missing or wrong. |
 | `permission_denied` | 403 | The key is valid but lacks the permission the route needs. |
 | `not_found` | 404 | The route does not exist, or the resource does not exist or belongs to another sandbox. A hold owned by another key also returns this. |
 | `malformed_request` | 400 | The request body is not valid JSON. |
@@ -34,4 +34,5 @@ The outcome of a mutation that ran, success or 4xx, is stored under its `Idempot
 | `preview_token_expired` | 410 | The token is older than 5 minutes, or its hold's expiry passed. Preview the hold again. |
 | `preview_token_used` | 409 | The token already confirmed a booking. A token confirms at most one booking. |
 | `preview_token_mismatch` | 409 | The hold's customer or price changed after the preview, so the token no longer describes the booking. Preview again. |
+| `simulated_lost_response` | 502 | Sandbox only. `POST /v1/bookings` was sent with `X-Sandbox-Simulate: drop_response_after_commit`: the booking committed and its 201 is stored under the `Idempotency-Key`. Retry with the same key to receive it. |
 | `internal_error` | 500 | Unexpected server error. Retrying with the same `Idempotency-Key` is safe: failed executions are not stored. |

@@ -1,6 +1,7 @@
 class ApiKey < ApplicationRecord
+  PREFIX = "bl_test_".freeze
   PERMISSIONS = %w[availability.read holds.write bookings.read bookings.write].freeze
-  TOKEN_FORMAT = /\Abl_test_([a-z0-9]{12})_([A-Za-z0-9]{32})\z/
+  TOKEN_FORMAT = /\A#{PREFIX}([a-z0-9]{12})_([A-Za-z0-9]{32})\z/
 
   belongs_to :sandbox
 
@@ -10,7 +11,7 @@ class ApiKey < ApplicationRecord
     lookup = SecureRandom.hex(6)
     secret = SecureRandom.alphanumeric(32)
     key = create!(sandbox: sandbox, lookup: lookup, secret_digest: digest(secret), permissions: permissions)
-    [ key, "bl_test_#{lookup}_#{secret}" ]
+    [ key, "#{PREFIX}#{lookup}_#{secret}" ]
   end
 
   def self.authenticate(token)
@@ -30,6 +31,10 @@ class ApiKey < ApplicationRecord
 
   def permitted?(permission)
     permissions.include?(permission)
+  end
+
+  def sandbox_key?
+    true
   end
 
   def revoked?

@@ -11,5 +11,16 @@ Rails.application.routes.draw do
     resources :bookings, only: :create
   end
 
+  scope "/sandbox", module: "control" do
+    post "/", to: "sandboxes#create"
+    scope "/:sandbox_id" do
+      post "keys", to: "keys#create"
+      delete "keys/:id", to: "keys#destroy"
+      post "reset", to: "sandboxes#reset"
+      post "holds/:hold_id/expire", to: "holds#expire"
+      get "requests", to: "requests#index"
+    end
+  end
+
   match "*path", to: "application#route_not_found", via: :all
 end

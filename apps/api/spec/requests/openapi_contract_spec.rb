@@ -8,18 +8,18 @@ RSpec.describe "Test 9: responses validate against openapi.yaml" do
   let(:court) { facility.courts.first }
   let(:customer) { sandbox.customers.first }
 
-  it "documents every data plane route" do
+  it "documents every data plane and control plane route" do
     documented = OpenapiContract.document["paths"].flat_map do |path, operations|
       operations.keys.map { |verb| "#{verb.upcase} #{path.gsub(/\{[^}]+\}/, '{}')}" }
     end
     routed = Rails.application.routes.routes.filter_map do |route|
       path = route.path.spec.to_s.sub("(.:format)", "")
-      next unless path.start_with?("/v1/")
+      next unless path.start_with?("/v1/", "/sandbox")
 
       "#{route.verb} #{path.gsub(/:\w+/, '{}')}"
     end
 
-    expect(routed).to match_array(documented.select { |r| r.split.last.start_with?("/v1/") })
+    expect(routed).to match_array(documented)
   end
 
   it "validates the read endpoints" do
@@ -62,6 +62,37 @@ RSpec.describe "Test 9: responses validate against openapi.yaml" do
 
     confirm(token, "nope")
     expect(response).to match_openapi("POST", "/v1/bookings")
+  end
+
+  it "validates the control plane" do
+    previous = ENV["SANDBOX_ADMIN_TOKEN"]
+    ENV["SANDBOX_ADMIN_TOKEN"] = "contract-admin"
+    admin = { "Authorization" => "Bearer contract-admin", "Content-Type" => "application/json" }
+
+    post "/sandbox", params: { name: "Contract" }.to_json, headers: admin
+    expect(response).to match_openapi("POST", "/sandbox")
+    created = json
+    id = created["sandbox"]["id"]
+
+    post "/sandbox/#{id}/keys", params: { permissions: [ "availability.read" ] }.to_json, headers: admin
+    expect(response).to match_openapi("POST", "/sandbox/{sandbox_id}/keys")
+
+    delete "/sandbox/#{id}/keys/#{json['id']}", headers: admin
+    expect(response).to match_openapi("DELETE", "/sandbox/{sandbox_id}/keys/{key_id}")
+
+    sandbox = Sandbox.find(id)
+    facility = sandbox.facilities.first
+    post_hold(created["key"]["api_key"], hold_body(facility.courts.first, sandbox.customers.first, tomorrow_at(facility, 10)))
+    post "/sandbox/#{id}/holds/#{json['id']}/expire", headers: admin
+    expect(response).to match_openapi("POST", "/sandbox/{sandbox_id}/holds/{hold_id}/expire")
+
+    get "/sandbox/#{id}/requests", headers: admin
+    expect(response).to match_openapi("GET", "/sandbox/{sandbox_id}/requests")
+
+    post "/sandbox/#{id}/reset", headers: admin
+    expect(response).to match_openapi("POST", "/sandbox/{sandbox_id}/reset")
+  ensure
+    ENV["SANDBOX_ADMIN_TOKEN"] = previous
   end
 
   it "catches a response that drifts from the document" do

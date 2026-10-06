@@ -209,12 +209,162 @@ paths:
         "422": { $ref: "#/components/responses/Problem" }
         "502": { $ref: "#/components/responses/Problem" }
 
+  /sandbox:
+    post:
+      operationId: createSandbox
+      tags: [control plane]
+      summary: Create a seeded sandbox and its first key
+      description: |
+        Control plane, local demo surface. Needs the SANDBOX_ADMIN_TOKEN bootstrap secret, not an API key.
+        The key's secret appears only in this response.
+      security:
+        - adminToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 100 }
+                permissions:
+                  type: array
+                  items: { $ref: "#/components/schemas/Permission" }
+      responses:
+        "201":
+          description: The sandbox and its first key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedSandbox" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /sandbox/{sandbox_id}/keys:
+    post:
+      operationId: createKey
+      tags: [control plane]
+      summary: Issue a key with chosen permissions
+      security:
+        - adminToken: []
+      parameters:
+        - $ref: "#/components/parameters/SandboxId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  minItems: 1
+                  items: { $ref: "#/components/schemas/Permission" }
+      responses:
+        "201":
+          description: The key. Its secret appears only in this response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Key" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /sandbox/{sandbox_id}/keys/{key_id}:
+    delete:
+      operationId: revokeKey
+      tags: [control plane]
+      summary: Revoke a key
+      security:
+        - adminToken: []
+      parameters:
+        - $ref: "#/components/parameters/SandboxId"
+        - name: key_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The revoked key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Key" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /sandbox/{sandbox_id}/reset:
+    post:
+      operationId: resetSandbox
+      tags: [control plane]
+      summary: Restore one sandbox to its seed data
+      description: |
+        Deletes the sandbox's holds, bookings, preview tokens and idempotency records and recreates its seeded
+        facilities, courts and customers (with new ids). Keys and the request log are kept. Other sandboxes are
+        untouched.
+      security:
+        - adminToken: []
+      parameters:
+        - $ref: "#/components/parameters/SandboxId"
+      responses:
+        "200":
+          description: The sandbox was reset.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResetResult" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /sandbox/{sandbox_id}/holds/{hold_id}/expire:
+    post:
+      operationId: expireHold
+      tags: [control plane]
+      summary: Expire a hold now
+      description: For demos and client tests. Frees the slot immediately.
+      security:
+        - adminToken: []
+      parameters:
+        - $ref: "#/components/parameters/SandboxId"
+        - $ref: "#/components/parameters/HoldId"
+      responses:
+        "200":
+          description: The expired hold.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hold" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+  /sandbox/{sandbox_id}/requests:
+    get:
+      operationId: listRequests
+      tags: [control plane]
+      summary: The sandbox's 50 most recent data plane requests
+      security:
+        - adminToken: []
+      parameters:
+        - $ref: "#/components/parameters/SandboxId"
+      responses:
+        "200":
+          description: Newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestLogPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     apiKey:
       type: http
       scheme: bearer
       description: A sandbox key of the form bl_test_<lookup>_<secret>.
+    adminToken:
+      type: http
+      scheme: bearer
+      description: The SANDBOX_ADMIN_TOKEN bootstrap secret. Control plane only.
 
   parameters:
     IdempotencyKey:
@@ -227,6 +377,11 @@ components:
       schema: { type: string, maxLength: 255 }
     FacilityId:
       name: facility_id
+      in: path
+      required: true
+      schema: { type: integer }
+    SandboxId:
+      name: sandbox_id
       in: path
       required: true
       schema: { type: integer }
@@ -483,3 +638,70 @@ components:
         price_cents: { type: integer, minimum: 0 }
         currency: { type: string, pattern: "^[A-Z]{3}$" }
         status: { type: string, enum: [confirmed] }
+
+    SandboxRef:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+
+    Key:
+      type: object
+      additionalProperties: false
+      required: [id, sandbox_id, permissions, revoked_at]
+      properties:
+        id: { type: integer }
+        sandbox_id: { type: integer }
+        permissions:
+          type: array
+          items: { $ref: "#/components/schemas/Permission" }
+        revoked_at:
+          oneOf:
+            - $ref: "#/components/schemas/Instant"
+            - type: "null"
+        api_key:
+          type: string
+          description: Present only in the response that created the key.
+          pattern: "^bl_test_[a-z0-9]{12}_[A-Za-z0-9]{32}$"
+
+    CreatedSandbox:
+      type: object
+      additionalProperties: false
+      required: [sandbox, key]
+      properties:
+        sandbox: { $ref: "#/components/schemas/SandboxRef" }
+        key: { $ref: "#/components/schemas/Key" }
+
+    RequestLogPage:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, key_id, method, path, status, code, replayed, client, duration_ms, created_at]
+            properties:
+              id: { type: integer }
+              key_id: { type: integer }
+              method: { type: string }
+              path: { type: string }
+              status: { type: integer }
+              code: { type: [string, "null"] }
+              replayed: { type: boolean }
+              client: { type: [string, "null"], enum: [curl, console, mcp, null] }
+              duration_ms: { type: integer }
+              created_at: { $ref: "#/components/schemas/Instant" }
+
+    ResetResult:
+      type: object
+      additionalProperties: false
+      required: [sandbox, reset_at]
+      properties:
+        sandbox: { $ref: "#/components/schemas/SandboxRef" }
+        reset_at: { $ref: "#/components/schemas/Instant" }
+
