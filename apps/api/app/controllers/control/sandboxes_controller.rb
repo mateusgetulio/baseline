@@ -5,7 +5,11 @@ module Control
       raise ApiError.validation([ { name: "name", reason: "must be a string of at most 100 characters" } ]) unless name.is_a?(String) && name.length <= 100
 
       created, key, plaintext = Sandboxes::Provision.call(name: name, permissions: requested_permissions)
-      render json: { sandbox: { id: created.id, name: created.name }, key: key_json(key, plaintext) }, status: :created
+      render json: {
+        sandbox: { id: created.id, name: created.name },
+        key: key_json(key, plaintext),
+        customers: created.customers.order(:id).map { |c| { id: c.id, name: c.name } }
+      }, status: :created
     end
 
     def reset

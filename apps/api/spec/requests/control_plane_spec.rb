@@ -45,6 +45,7 @@ RSpec.describe "Sandbox control plane" do
     expect(body["sandbox"]["name"]).to eq("Demo")
     expect(body["key"]["permissions"]).to match_array(ApiKey::PERMISSIONS)
     expect(body["key"]["api_key"]).to start_with("bl_test_")
+    expect(body["customers"].map { |c| c["name"] }).to include("Avery Lindqvist")
     expect(ApiKey.find(body["key"]["id"]).secret_digest).not_to include(body["key"]["api_key"].split("_").last)
 
     get "/v1/facilities", headers: auth(body["key"]["api_key"])
@@ -83,15 +84,23 @@ RSpec.describe "Sandbox control plane" do
       confirm(created["key"]["api_key"], json["preview_token"])
     end
     sandbox = Sandbox.find(first["sandbox"]["id"])
+    ids_before = [ sandbox.facilities.order(:id).ids, Court.where(facility: sandbox.facilities).order(:id).ids,
+                   sandbox.customers.order(:id).ids ]
     sandbox.facilities.first.update!(name: "Renamed")
+    sandbox.facilities.first.courts.first.update!(hourly_rate_cents: 1)
+    extra = sandbox.facilities.create!(name: "Extra", time_zone: "UTC", opens_minute: 0, closes_minute: 60)
+    extra.courts.create!(name: "X", sport: "tennis", hourly_rate_cents: 1, currency: "USD")
 
     post "/sandbox/#{sandbox.id}/reset", headers: admin
 
     expect(response.status).to eq(200)
     expect(Booking.where(sandbox: sandbox).count).to eq(0)
     expect(Hold.where(sandbox: sandbox).count).to eq(0)
-    expect(sandbox.facilities.pluck(:name)).to eq([ "Harbor Point Racquet Club", "Lakeside Padel" ])
+    expect(sandbox.facilities.order(:id).pluck(:name)).to eq([ "Harbor Point Racquet Club", "Lakeside Padel" ])
     expect(sandbox.api_keys.count).to eq(1)
+    expect([ sandbox.facilities.order(:id).ids, Court.where(facility: sandbox.facilities).order(:id).ids,
+             sandbox.customers.order(:id).ids ]).to eq(ids_before)
+    expect(sandbox.facilities.first.courts.first.hourly_rate_cents).to eq(4000)
     expect(Booking.where(sandbox_id: second["sandbox"]["id"]).count).to eq(1)
     expect(Hold.where(sandbox_id: second["sandbox"]["id"]).count).to eq(1)
   end

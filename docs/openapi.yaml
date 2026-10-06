@@ -300,9 +300,9 @@ paths:
       tags: [control plane]
       summary: Restore one sandbox to its seed data
       description: |
-        Deletes the sandbox's holds, bookings, preview tokens and idempotency records and recreates its seeded
-        facilities, courts and customers (with new ids). Keys and the request log are kept. Other sandboxes are
-        untouched.
+        Deletes the sandbox's holds, bookings, preview tokens and idempotency records and restores its seeded
+        facilities, courts and customers in place, so their ids stay the same. Keys and the request log are
+        kept. Other sandboxes are untouched.
       security:
         - adminToken: []
       parameters:
@@ -669,10 +669,20 @@ components:
     CreatedSandbox:
       type: object
       additionalProperties: false
-      required: [sandbox, key]
+      required: [sandbox, key, customers]
       properties:
         sandbox: { $ref: "#/components/schemas/SandboxRef" }
         key: { $ref: "#/components/schemas/Key" }
+        customers:
+          type: array
+          description: The seeded players, so a client such as the MCP server can be configured to book for one.
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name]
+            properties:
+              id: { type: integer }
+              name: { type: string }
 
     RequestLogPage:
       type: object
