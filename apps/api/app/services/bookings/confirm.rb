@@ -1,9 +1,8 @@
 module Bookings
   class Confirm
-    def initialize(api_key:, plaintext_token:, now: Time.current)
+    def initialize(api_key:, plaintext_token:)
       @api_key = api_key
       @plaintext_token = plaintext_token
-      @now = now
     end
 
     def call
@@ -14,6 +13,8 @@ module Bookings
 
       ReadCommitted.transaction do
         hold = Hold.lock.find_by(id: issued_token.hold_id)
+        Court.lock.find(hold.court_id)
+        @now = Time.current
         token = PreviewToken.find(issued_token.id)
         check_token!(token)
         check_hold!(hold)

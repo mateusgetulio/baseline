@@ -2,6 +2,7 @@
 
 - **READ COMMITTED for mutations.** Correctness comes from row locks taken before the checks. Under MySQL's default REPEATABLE READ, a check that runs after a lock can still read an older snapshot; the hold race test fails without this.
 - **Idempotency claim with INSERT IGNORE.** The claim is an insert under the unique index, checked by affected rows, instead of catching duplicate-key errors. The trilogy driver (2.13.1 on Ruby 4.0) returns a corrupted error message when many duplicate-key errors happen at once. To keep INSERT IGNORE from hiding other problems, paths longer than 255 characters are rejected before the claim.
+- **No takeover of abandoned idempotency claims.** If the process dies after claiming a key and before finishing, that key keeps answering `idempotency_in_progress`. The work itself was rolled back, so a new key (or, for an agent, a new preview) is safe. Production would let a stale claim be taken over after a timeout.
 - **4xx outcomes are stored under the Idempotency-Key.** A retry with the same key gets the same answer even if the slot frees up later; send a new key to try again. Unexpected 5xx outcomes are not stored.
 - **Lazy expiry, no job system.** Expired holds are filtered by time on every read and write path. Nothing needs a background worker.
 - **30 minute slot grid.** Holds must start on the grid that availability returns, so a client cannot block more slots than it sees.

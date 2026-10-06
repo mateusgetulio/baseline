@@ -40,7 +40,7 @@ Then ask: "Find a court tomorrow at 10 for an hour at Harbor Point and book it."
 ## One data plane, one small control plane
 
 - `/v1/*` is the data plane. curl, the console's examples and the MCP server all call it the same way. The MCP server has no database access and no private routes.
-- `/sandbox/*` is a tiny control plane: create a sandbox, issue and revoke keys, reset, expire a hold, read the request log. It is a local demo surface protected by one bootstrap secret, `SANDBOX_ADMIN_TOKEN`, which `bin/setup` writes to `.env`. It is not real console auth.
+- `/sandbox/*` is a tiny control plane: create a sandbox, issue and revoke keys, reset, expire a hold, read the request log. It is a local demo surface protected by one bootstrap secret, `SANDBOX_ADMIN_TOKEN`, which `bin/setup` writes to `.env`. It is not real console auth. The console's dev server adds that secret to its `/sandbox` calls so it never reaches the browser, which means anything that can reach the console's local port can use the control plane.
 
 See [docs/architecture.md](docs/architecture.md), [docs/openapi.yaml](docs/openapi.yaml) and [docs/errors.md](docs/errors.md).
 
@@ -62,7 +62,7 @@ Each test fails if its guarantee is removed (checked by breaking each guard once
 
 All Rails specs: `cd apps/api && bundle exec rspec`. Main responses are validated against `docs/openapi.yaml` in the request specs.
 
-To watch the hold race against your own running sandbox, with the key and player id from the console:
+To watch a hold race against your own running sandbox, with the key and player id from the console (it sends all 20 holds from one key, so it is a demo; the RSpec hold race with 20 keys is the proof):
 
 ```bash
 BASELINE_KEY=bl_test_... BASELINE_CUSTOMER_ID=1 node scripts/hold_race.mjs

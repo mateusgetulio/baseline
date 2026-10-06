@@ -124,7 +124,7 @@ export function buildServer(api: BaselineApi, me: Me, config: ServerConfig): Mcp
       {
         title: "Hold a court",
         description:
-          "Reserves one court window for a short time so nobody else can take it while the user decides. This consumes scarce inventory: hold only what the user asked for, keep the TTL short, and release holds the user does not want. A key can have at most 3 active holds. Holding does not book anything.",
+          "Reserves one court window for a short time so nobody else can take it while the user decides. This consumes scarce inventory: hold only what the user asked for, keep the TTL short, and release holds the user does not want. A key can have at most 3 active holds. Holding does not book anything. If a call fails without a clear answer, do not retry it: the hold may already exist and blocks the slot until it expires, so search again and tell the user.",
         inputSchema: {
           court_id: z.number().int(),
           starts_at: INSTANT,

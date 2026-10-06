@@ -74,8 +74,14 @@ module ApiJson
     minutes = ((hold.ends_at - hold.starts_at) / 60).round
     "Book #{court.name} (#{court.sport}) at #{facility.name} for #{hold.customer.name} " \
       "on #{starts_at.strftime('%A, %B %-d, %Y')}, from #{starts_at.strftime('%H:%M')} to #{ends_at.strftime('%H:%M')} " \
-      "(UTC#{starts_at.formatted_offset}, #{facility.time_zone}). " \
+      "(#{offsets(starts_at, ends_at)}, #{facility.time_zone}). " \
       "#{minutes} minutes, total #{money(token.price_cents, token.currency)}."
+  end
+
+  def offsets(starts_at, ends_at)
+    return "UTC#{starts_at.formatted_offset}" if starts_at.utc_offset == ends_at.utc_offset
+
+    "starts at UTC#{starts_at.formatted_offset}, ends at UTC#{ends_at.formatted_offset}"
   end
 
   def money(cents, currency)

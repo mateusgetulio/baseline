@@ -45,6 +45,17 @@ RSpec.describe "Test 8: time contract" do
     expect(starts).not_to include(second)
   end
 
+  it "states both offsets in the preview summary when a booking crosses the change" do
+    date = next_fall_back_date
+    post_hold(token, { court_id: all_day.courts.first.id, customer_id: sandbox.customers.first.id,
+                       starts_at: "#{date.iso8601}T01:00:00-04:00", ends_at: "#{date.iso8601}T01:30:00-05:00",
+                       ttl_seconds: 120 })
+    summary = preview_hold(token, json["id"])["summary"]
+
+    expect(summary).to include("from 01:00 to 01:30 (starts at UTC-04:00, ends at UTC-05:00")
+    expect(summary).to include("90 minutes")
+  end
+
   it "rejects naked local times on mutations" do
     facility = sandbox.facilities.first
     starts_at = tomorrow_at(facility, 10)

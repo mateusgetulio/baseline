@@ -79,6 +79,17 @@ RSpec.describe "Test 4: idempotency semantics" do
     expect(json["code"]).to eq("idempotency_key_reused")
   end
 
+  it "answers idempotency_in_progress while the first request with the key is still running" do
+    post_hold(token, body, key: "first")
+    record = IdempotencyRecord.find_by!(key: "first")
+    record.update!(state: "in_progress", response_status: nil, response_body: nil)
+
+    post_hold(token, body, key: "first")
+
+    expect(response.status).to eq(409)
+    expect(json["code"]).to eq("idempotency_in_progress")
+  end
+
   it "scopes keys per API key" do
     other_token = issue_token(sandbox)
     post_hold(token, body, key: "shared")
