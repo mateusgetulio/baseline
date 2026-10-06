@@ -14,7 +14,7 @@ Every error response is an RFC 9457 Problem Details body with the media type `ap
 
 Branch on `code`. It is stable; `title` and `detail` are for people and may change. Validation errors add `invalid_params`, a list of `{ "name", "reason" }` objects.
 
-The outcome of a mutation that ran, success or 4xx, is stored under its `Idempotency-Key` and replayed on every retry with that key. To try again after a `validation_failed`, `slot_unavailable`, `hold_limit_reached` or `hold_not_active` response, send a new `Idempotency-Key`.
+The outcome of a mutation that ran, success or 4xx, is stored under its `Idempotency-Key` and replayed on every retry with that key. To try again after a `validation_failed`, `slot_unavailable`, `hold_limit_reached`, `hold_not_active` or `preview_token_*` response, send a new `Idempotency-Key`.
 
 | Code | Status | When |
 |---|---|---|
@@ -29,4 +29,9 @@ The outcome of a mutation that ran, success or 4xx, is stored under its `Idempot
 | `slot_unavailable` | 409 | Another active hold or a confirmed booking overlaps the requested window. The response never says who holds it. |
 | `hold_limit_reached` | 409 | The key already has 3 active holds. Release one, book one, or let one expire. |
 | `hold_not_active` | 409 | The hold was already released, expired or converted into a booking. |
+| `preview_token_missing` | 422 | `POST /v1/bookings` was sent without a `preview_token`. |
+| `preview_token_invalid` | 422 | The `preview_token` is unknown, or was issued to a different key. |
+| `preview_token_expired` | 410 | The token is older than 5 minutes, or its hold's expiry passed. Preview the hold again. |
+| `preview_token_used` | 409 | The token already confirmed a booking. A token confirms at most one booking. |
+| `preview_token_mismatch` | 409 | The hold's customer or price changed after the preview, so the token no longer describes the booking. Preview again. |
 | `internal_error` | 500 | Unexpected server error. Retrying with the same `Idempotency-Key` is safe: failed executions are not stored. |

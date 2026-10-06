@@ -77,6 +77,21 @@ RSpec.describe "Test 6: hold limit and expiry" do
     end
   end
 
+  it "will not preview or book an expired hold" do
+    hold_id, preview_token = held_and_previewed(token, courts[0], customer, tomorrow_at(facility, 10), ttl: 30)
+
+    travel 31.seconds do
+      post "/v1/holds/#{hold_id}/preview", headers: auth(token)
+      expect(response.status).to eq(409)
+      expect(json["code"]).to eq("hold_not_active")
+
+      confirm(token, preview_token)
+      expect(response.status).to eq(410)
+      expect(json["code"]).to eq("preview_token_expired")
+    end
+    expect(Booking.count).to eq(0)
+  end
+
   def slot_starts(court, starts_at)
     get "/v1/availability", params: { facility_id: facility.id, date: starts_at.to_date.iso8601, duration_minutes: 60 },
                             headers: auth(token)

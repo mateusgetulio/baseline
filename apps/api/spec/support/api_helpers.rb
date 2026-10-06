@@ -31,4 +31,20 @@ module ApiHelpers
   def post_hold(token, body, key: SecureRandom.uuid)
     post "/v1/holds", params: body.to_json, headers: auth(token, idempotency_key: key)
   end
+
+  def preview_hold(token, hold_id)
+    post "/v1/holds/#{hold_id}/preview", headers: auth(token)
+    json
+  end
+
+  def confirm(token, preview_token, key: SecureRandom.uuid, extra: {})
+    post "/v1/bookings", params: { preview_token: preview_token }.to_json,
+                         headers: auth(token, idempotency_key: key, extra: extra)
+  end
+
+  def held_and_previewed(token, court, customer, starts_at, ttl: 120)
+    post_hold(token, hold_body(court, customer, starts_at, ttl: ttl))
+    hold_id = json["id"]
+    [ hold_id, preview_hold(token, hold_id)["preview_token"] ]
+  end
 end

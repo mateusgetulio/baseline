@@ -29,4 +29,5 @@ end
 
 group :test do
   gem "rspec-rails", "~> 8.0"
+  gem "json_schemer", "~> 2.4"
 end

@@ -5,7 +5,10 @@ Rails.application.routes.draw do
       resources :courts, only: :index
     end
     get "availability", to: "availability#show"
-    resources :holds, only: %i[create destroy]
+    resources :holds, only: %i[create destroy] do
+      resource :preview, only: :create
+    end
+    resources :bookings, only: :create
   end
 
   match "*path", to: "application#route_not_found", via: :all

@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: Baseline court booking API
+  version: 0.1.0
+  description: |
+    One booking contract for developers and AI agents. The data plane lives under /v1 and is the only surface
+    the MCP server uses. Every instant is an RFC 3339 timestamp with an offset. Every mutation needs an
+    Idempotency-Key header. Errors are RFC 9457 Problem Details; see docs/errors.md for every code.
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:3000
+security:
+  - apiKey: []
+
+paths:
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: Identify the calling key
+      responses:
+        "200":
+          description: The key, its sandbox and its permissions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /v1/facilities:
+    get:
+      operationId: listFacilities
+      summary: List facilities in the key's sandbox
+      description: Needs availability.read.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of facilities.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FacilityPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/facilities/{facility_id}/courts:
+    get:
+      operationId: listCourts
+      summary: List a facility's courts
+      description: Needs availability.read.
+      parameters:
+        - $ref: "#/components/parameters/FacilityId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of courts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourtPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/availability:
+    get:
+      operationId: getAvailability
+      summary: Free slots per court for one local date
+      description: |
+        Needs availability.read. The date is read in the facility's time zone. Slots start every 30 minutes from
+        opening time and exclude active holds, confirmed bookings and start times in the past. On a day when
+        clocks fall back, the repeated local hour appears twice with different offsets.
+      parameters:
+        - name: facility_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: date
+          in: query
+          required: true
+          description: Facility-local calendar date, YYYY-MM-DD, from yesterday to two years ahead.
+          schema: { type: string, format: date }
+        - name: duration_minutes
+          in: query
+          required: true
+          schema: { type: integer, minimum: 30, maximum: 240, multipleOf: 30 }
+      responses:
+        "200":
+          description: Free slots grouped by court.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Availability" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/holds:
+    post:
+      operationId: createHold
+      summary: Hold a court window briefly
+      description: |
+        Needs holds.write. A hold is a short, reversible reservation of scarce inventory: while it is active
+        nobody else can hold or book an overlapping window. A key can have at most 3 active holds.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HoldRequest" }
+      responses:
+        "201":
+          description: The hold was created.
+          headers:
+            Idempotent-Replayed: { $ref: "#/components/headers/IdempotentReplayed" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hold" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/holds/{hold_id}:
+    delete:
+      operationId: releaseHold
+      summary: Release a hold
+      description: Needs holds.write. Only the key that created the hold can release it; any other key gets 404.
+      parameters:
+        - $ref: "#/components/parameters/HoldId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: The hold was released.
+          headers:
+            Idempotent-Replayed: { $ref: "#/components/headers/IdempotentReplayed" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hold" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+  /v1/holds/{hold_id}/preview:
+    post:
+      operationId: previewBooking
+      summary: Preview the booking a hold would become
+      description: |
+        Needs bookings.read and ownership of the hold. Read-style: it changes no inventory and needs no
+        Idempotency-Key. Returns the price, a plain-language summary to show the person, and a single-use
+        preview_token bound to this hold, customer and price. The token expires after 5 minutes or when the
+        hold expires, whichever comes first.
+      parameters:
+        - $ref: "#/components/parameters/HoldId"
+      responses:
+        "201":
+          description: A preview and its token.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Preview" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+  /v1/bookings:
+    post:
+      operationId: confirmBooking
+      summary: Confirm a booking with a preview token
+      description: |
+        Needs bookings.write. Converts the previewed hold into a confirmed booking. A token confirms at most
+        one booking, however many times or however concurrently it is sent.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: X-Sandbox-Simulate
+          in: header
+          required: false
+          description: |
+            Sandbox failure simulation. drop_response_after_commit commits the booking and stores its 201 under
+            the Idempotency-Key, then answers 502 simulated_lost_response. Retry with the same key to get the
+            stored 201.
+          schema:
+            type: string
+            enum: [drop_response_after_commit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookingRequest" }
+      responses:
+        "201":
+          description: The booking was confirmed.
+          headers:
+            Idempotent-Replayed: { $ref: "#/components/headers/IdempotentReplayed" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Booking" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "410": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "502": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: A sandbox key of the form bl_test_<lookup>_<secret>.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Unique per operation, up to 255 characters, compared exactly. The same key with the same request replays
+        the stored response; with a different request it returns 409 idempotency_key_reused.
+      schema: { type: string, maxLength: 255 }
+    FacilityId:
+      name: facility_id
+      in: path
+      required: true
+      schema: { type: integer }
+    HoldId:
+      name: hold_id
+      in: path
+      required: true
+      schema: { type: integer }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: The next_cursor from the previous page.
+      schema: { type: string }
+
+  headers:
+    IdempotentReplayed:
+      description: Present and true when the response is a stored replay.
+      schema: { type: string, enum: ["true"] }
+
+  responses:
+    Problem:
+      description: An RFC 9457 Problem Details error.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Instant:
+      type: string
+      description: RFC 3339 instant with an explicit offset.
+      pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$"
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, code]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          type: string
+          enum:
+            - unauthorized
+            - permission_denied
+            - not_found
+            - malformed_request
+            - validation_failed
+            - idempotency_key_missing
+            - idempotency_key_reused
+            - idempotency_in_progress
+            - slot_unavailable
+            - hold_limit_reached
+            - hold_not_active
+            - preview_token_missing
+            - preview_token_invalid
+            - preview_token_expired
+            - preview_token_used
+            - preview_token_mismatch
+            - simulated_lost_response
+            - internal_error
+        invalid_params:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, reason]
+            properties:
+              name: { type: string }
+              reason: { type: string }
+
+    Permission:
+      type: string
+      enum: [availability.read, holds.write, bookings.read, bookings.write]
+
+    Me:
+      type: object
+      additionalProperties: false
+      required: [key_id, sandbox, permissions]
+      properties:
+        key_id: { type: integer }
+        sandbox:
+          type: object
+          additionalProperties: false
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        permissions:
+          type: array
+          items: { $ref: "#/components/schemas/Permission" }
+
+    Facility:
+      type: object
+      additionalProperties: false
+      required: [id, name, time_zone]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        time_zone: { type: string, description: IANA time zone name. }
+
+    FacilityPage:
+      type: object
+      additionalProperties: false
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Facility" }
+        next_cursor: { type: [string, "null"] }
+
+    Court:
+      type: object
+      additionalProperties: false
+      required: [id, facility_id, name, sport, hourly_rate_cents, currency]
+      properties:
+        id: { type: integer }
+        facility_id: { type: integer }
+        name: { type: string }
+        sport: { type: string }
+        hourly_rate_cents: { type: integer, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+
+    CourtPage:
+      type: object
+      additionalProperties: false
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Court" }
+        next_cursor: { type: [string, "null"] }
+
+    Slot:
+      type: object
+      additionalProperties: false
+      required: [starts_at, ends_at, price_cents, currency]
+      properties:
+        starts_at: { $ref: "#/components/schemas/Instant" }
+        ends_at: { $ref: "#/components/schemas/Instant" }
+        price_cents: { type: integer, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+
+    Availability:
+      type: object
+      additionalProperties: false
+      required: [facility_id, date, time_zone, duration_minutes, courts]
+      properties:
+        facility_id: { type: integer }
+        date: { type: string, format: date }
+        time_zone: { type: string }
+        duration_minutes: { type: integer }
+        courts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [court_id, name, sport, slots]
+            properties:
+              court_id: { type: integer }
+              name: { type: string }
+              sport: { type: string }
+              slots:
+                type: array
+                items: { $ref: "#/components/schemas/Slot" }
+
+    HoldRequest:
+      type: object
+      additionalProperties: false
+      required: [court_id, customer_id, starts_at, ends_at, ttl_seconds]
+      properties:
+        court_id: { type: integer }
+        customer_id: { type: integer }
+        starts_at:
+          $ref: "#/components/schemas/Instant"
+          description: Must be on the 30 minute slot grid and in the future.
+        ends_at:
+          $ref: "#/components/schemas/Instant"
+          description: 30 to 240 minutes after starts_at, in steps of 30, within opening hours.
+        ttl_seconds: { type: integer, minimum: 30, maximum: 600 }
+
+    Hold:
+      type: object
+      additionalProperties: false
+      required: [id, court_id, customer_id, starts_at, ends_at, expires_at, status]
+      properties:
+        id: { type: integer }
+        court_id: { type: integer }
+        customer_id: { type: integer }
+        starts_at: { $ref: "#/components/schemas/Instant" }
+        ends_at: { $ref: "#/components/schemas/Instant" }
+        expires_at: { $ref: "#/components/schemas/Instant" }
+        status: { type: string, enum: [active, released, expired, converted] }
+
+    Preview:
+      type: object
+      additionalProperties: false
+      required:
+        [hold_id, facility, court, customer, starts_at, ends_at, price_cents, currency, summary, preview_token,
+         preview_token_expires_at]
+      properties:
+        hold_id: { type: integer }
+        facility: { $ref: "#/components/schemas/Facility" }
+        court:
+          type: object
+          additionalProperties: false
+          required: [id, name, sport]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            sport: { type: string }
+        customer:
+          type: object
+          additionalProperties: false
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        starts_at: { $ref: "#/components/schemas/Instant" }
+        ends_at: { $ref: "#/components/schemas/Instant" }
+        price_cents: { type: integer, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        summary:
+          type: string
+          description: Plain-language description of the booking to show the person before they confirm.
+        preview_token: { type: string, pattern: "^bl_preview_[A-Za-z0-9]{40}$" }
+        preview_token_expires_at: { $ref: "#/components/schemas/Instant" }
+
+    BookingRequest:
+      type: object
+      additionalProperties: false
+      required: [preview_token]
+      properties:
+        preview_token: { type: string }
+
+    Booking:
+      type: object
+      additionalProperties: false
+      required: [id, hold_id, court_id, customer_id, starts_at, ends_at, price_cents, currency, status]
+      properties:
+        id: { type: integer }
+        hold_id: { type: integer }
+        court_id: { type: integer }
+        customer_id: { type: integer }
+        starts_at: { $ref: "#/components/schemas/Instant" }
+        ends_at: { $ref: "#/components/schemas/Instant" }
+        price_cents: { type: integer, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        status: { type: string, enum: [confirmed] }

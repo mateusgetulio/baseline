@@ -18,6 +18,24 @@ RSpec.describe "Test 7: permissions and sandbox scope" do
       expect(Hold.count).to eq(0)
     end
 
+    it "returns 403 when a key without bookings.write confirms a booking" do
+      limited = issue_token(sandbox, permissions: %w[availability.read holds.write bookings.read])
+      _hold_id, preview_token = held_and_previewed(limited, court, customer, tomorrow_at(facility, 10))
+      confirm(limited, preview_token)
+
+      expect(response.status).to eq(403)
+      expect(json["code"]).to eq("permission_denied")
+      expect(Booking.count).to eq(0)
+    end
+
+    it "returns 403 when a key without bookings.read previews" do
+      no_read = issue_token(sandbox, permissions: %w[holds.write bookings.write])
+      post_hold(no_read, hold_body(court, customer, tomorrow_at(facility, 10)))
+      post "/v1/holds/#{json['id']}/preview", headers: auth(no_read)
+
+      expect(response.status).to eq(403)
+    end
+
     it "returns 403 when a holds-only key reads availability" do
       holds_only = issue_token(sandbox, permissions: [ "holds.write" ])
       get "/v1/facilities", headers: auth(holds_only)
