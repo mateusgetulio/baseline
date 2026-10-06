@@ -1,0 +1,21 @@
+default: &default
+  adapter: trilogy
+  encoding: utf8mb4
+  collation: utf8mb4_0900_ai_ci
+  max_connections: <%= ENV.fetch("DB_POOL") { 30 } %>
+  username: <%= ENV.fetch("DB_USERNAME") { "root" } %>
+  password: <%= ENV.fetch("DB_PASSWORD") { "baseline" } %>
+  host: <%= ENV.fetch("DB_HOST") { "127.0.0.1" } %>
+  port: <%= ENV.fetch("DB_PORT") { 3307 } %>
+
+development:
+  <<: *default
+  database: baseline_development
+
+test:
+  <<: *default
+  database: baseline_test
+
+production:
+  <<: *default
+  database: baseline_production

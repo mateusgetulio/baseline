@@ -1,0 +1,14 @@
+.DS_Store
+.env
+node_modules/
+dist/
+scripts/names.local.txt
+
+apps/api/.bundle/
+apps/api/vendor/bundle/
+apps/api/log/*
+!apps/api/log/.keep
+apps/api/tmp/*
+!apps/api/tmp/.keep
+apps/api/storage/*
+apps/api/config/master.key
