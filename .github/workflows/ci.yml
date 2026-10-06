@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: baseline
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pbaseline"
+          --health-interval=3s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      RAILS_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          working-directory: apps/api
+          bundler-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mcp/package-lock.json
+
+      - name: Prepare the test database
+        working-directory: apps/api
+        run: bin/rails db:create db:schema:load
+
+      - name: RuboCop
+        working-directory: apps/api
+        run: bundle exec rubocop
+
+      - name: RSpec
+        working-directory: apps/api
+        run: bundle exec rspec
+
+      - name: Install MCP dependencies
+        working-directory: apps/mcp
+        run: npm ci
+
+      - name: TypeScript (MCP)
+        working-directory: apps/mcp
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: ESLint (MCP)
+        working-directory: apps/mcp
+        run: npx eslint .
+
+      - name: MCP end to end (test 10)
+        working-directory: apps/mcp
+        run: npm run test:e2e

@@ -189,7 +189,7 @@ test("Test 10: tool annotations and confirmation instructions", async () => {
     assert.equal(tools.confirm_booking!.annotations?.idempotentHint, true);
     assert.match(tools.confirm_booking!.description!, /explicitly said yes/);
     assert.match(tools.preview_booking!.description!, /Show the summary to the user/);
-    for (const tool of Object.values(tools)) assert.doesNotMatch(tool.description ?? "", /—/);
+    for (const tool of Object.values(tools)) assert.doesNotMatch(tool.description ?? "", /\u2014/);
   } finally {
     await client.close();
   }
